@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -10,7 +10,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('Admin - Gestion des utilisateurs')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
+@Roles(Role.ADMIN, Role.STAFF, Role.BENEVOL)
 @Controller('admin/users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -20,7 +20,10 @@ export class UsersController {
     return this.usersService.list();
   }
 
-
+@Get(':id')
+  getUserById(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.getUserById(id);
+  }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateUserDto) {

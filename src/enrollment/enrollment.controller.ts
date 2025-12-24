@@ -7,6 +7,8 @@ import {
     UseGuards,
     Req,
     Param,
+    Query,
+    ParseIntPipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -29,7 +31,20 @@ export class EnrollmentController {
     createPublic(@Body() dto: any) {
         return this.service.createPublicEnrollment(dto);
     }
+@Get('admin/children')
+  @Roles(Role.ADMIN, Role.BENEVOL, Role.STAFF)
+  listChildren(@Query('q') q = '') {
+    return this.service.searchEnrollmentChildren(q);
+  }
 
+/*@Post('children/:childId/assign/:groupId')
+@Roles(Role.ADMIN, Role.BENEVOL) // comme tu veux
+assignChildToGroup(
+  @Param('childId', ParseIntPipe) childId: number,
+  @Param('groupId', ParseIntPipe) groupId: number
+) {
+  return this.service.assignChildToGroup(childId, groupId);
+}*/
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.PARENT)
     @Post('start')
@@ -61,8 +76,9 @@ export class EnrollmentController {
         return this.service.updateStatus(+id, status);
     }
 
+
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.STAFF)
+    @Roles(Role.ADMIN, Role.STAFF, Role.PARENT)
     @Get('request/:id')
     getOne(@Param('id') id: string) {
         return this.service.getRequestById(+id);

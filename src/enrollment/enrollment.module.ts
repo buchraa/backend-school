@@ -15,11 +15,13 @@ import { StudentsModule } from 'src/students/students.module';
 import { UsersModule } from 'src/users/users.module';
 import { SchoolYearService } from 'src/schoolYear/schoolYear.service';
 import { SchoolYearController } from './schoolYear.controller';
+import { ClassGroup } from 'src/classes/entities/class-group.entity';
+import { ClassesModule } from 'src/classes/classes.module';
 
 @Module({
 imports: [
-  TypeOrmModule.forFeature([SchoolYear, EnrollmentRequest, EnrollmentChild, Parent, User, Student, Teacher, SchoolYear]),
-  StudentsModule, ParentsModule, AuthModule, UsersModule // ✅ récupère StudentRepository via exports
+  TypeOrmModule.forFeature([SchoolYear, EnrollmentRequest, EnrollmentChild, Parent, User, Student, Teacher, SchoolYear, ClassGroup]),
+  StudentsModule, ParentsModule, AuthModule, UsersModule, ClassesModule, EnrollmentModule // ✅ récupère StudentRepository via exports
 ],
   providers: [EnrollmentService, SchoolYearService],
   controllers: [EnrollmentController, SchoolYearController],

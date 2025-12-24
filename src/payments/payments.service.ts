@@ -130,9 +130,19 @@ async importBankLines(dto: ImportBankDto) {
       continue;
     }
 
-    const paymentDate = new Date(line.date);
-    const year = paymentDate.getFullYear();
-    const month = paymentDate.getMonth() + 1;
+const paymentDate = this.parseFrenchDateStrict(line.date);
+
+if (!paymentDate) {
+  results.push({
+    line,
+    status: 'SKIPPED',
+    reason: 'Invalid date format',
+  });
+  continue;
+}   
+
+const year = paymentDate.getUTCFullYear();
+const month = paymentDate.getUTCMonth() + 1;
 
     // On suppose que le virement correspond au mois du virement
     let billing = await this.billingRepo.findOne({
@@ -187,6 +197,41 @@ async importBankLines(dto: ImportBankDto) {
 
   return results;
 }
+
+
+private parseFrenchDateStrict(value: string): Date {
+  const raw = (value ?? '').trim();
+
+  // DD/MM/YYYY (FR)
+  const fr = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (fr) {
+    const day = Number(fr[1]);
+    const month = Number(fr[2]);
+    const year = Number(fr[3]);
+
+    // Debug utile (tu peux le laisser 2 minutes)
+    // console.log('[DATE FR]', raw, { day, month, year });
+
+    // Validation simple
+    if (month < 1 || month > 12) throw new Error(`Invalid month in date: ${raw}`);
+    if (day < 1 || day > 31) throw new Error(`Invalid day in date: ${raw}`);
+
+    // UTC pour éviter les décalages de timezone (important)
+    return new Date(Date.UTC(year, month - 1, day));
+  }
+
+  // ISO YYYY-MM-DD
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) {
+    const year = Number(iso[1]);
+    const month = Number(iso[2]);
+    const day = Number(iso[3]);
+    return new Date(Date.UTC(year, month - 1, day));
+  }
+
+  throw new Error(`Unsupported date format: ${raw}`);
+}
+
 
 
 }

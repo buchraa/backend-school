@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn  } from 'typeorm';
 import { EnrollmentRequest } from './enrollment-request.entity';
 import { Student } from '../../students/entities/student.entity';
 import { ClassGroup } from 'src/classes/entities/class-group.entity';
@@ -14,8 +14,13 @@ export class EnrollmentChild {
   @ManyToOne(() => Student, { nullable: true })
   existingStudent?: Student; // si réinscription
 
-    // 🔹 Classe cible choisie par l’admin / staff
-  @ManyToOne(() => ClassGroup, { nullable: true })
+  // ✅ colonne FK explicite (plus simple à update)
+  @Column({ nullable: true })
+  targetClassGroupId?: number;
+
+
+@ManyToOne(() => ClassGroup, { nullable: true })
+  @JoinColumn({ name: 'targetClassGroupId' })
   targetClassGroup?: ClassGroup;
 
   // Pour les nouveaux enfants

@@ -1,8 +1,9 @@
 // src/classes/dto/assign-students.dto.ts
-import { IsArray, IsInt } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsInt } from 'class-validator';
 
 export class AssignStudentsDto {
   @IsArray()
+  @ArrayNotEmpty()
   @IsInt({ each: true })
-  studentIds: number[];
+  childIds: number[];
 }

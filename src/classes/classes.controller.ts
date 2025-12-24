@@ -62,15 +62,26 @@ export class ClassesController {
 
 
 
-// ✅ Affecter des élèves à un groupe
-  @Post(':id/students')
-  assignStudents(@Param('id') id: string, @Body() dto: AssignStudentsDto) {
-    return this.classesService.assignStudents(+id, dto);
+  // Affecter des enfants (EnrollmentChild) à un groupe
+  @Post(':id/assign-child')
+  async assignChildToGroup(
+    @Param('id', ParseIntPipe) classId: number,
+    @Body() dto: AssignStudentsDto,
+  ) {
+    return this.classesService.assignChildrenToGroup(classId, dto.childIds);
   }
 
   // ✅ Affecter des enseignants à un groupe
   @Post(':id/teachers')
   assignTeachers(@Param('id') id: string, @Body() dto: AssignTeachersDto) {
     return this.classesService.assignTeachers(+id, dto);
+  }
+
+  @Delete('class-groups/:groupId/students/:studentId')
+  removeStudentFromGroup(
+    @Param('groupId', ParseIntPipe) groupId: number,
+    @Param('studentId', ParseIntPipe) studentId: number,
+  ) {
+    return this.classesService.removeStudentFromGroup(groupId, studentId);
   }
 }

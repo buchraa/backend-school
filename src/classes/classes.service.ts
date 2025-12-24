@@ -13,6 +13,8 @@ import { AssignStudentsDto } from './dto/assign-students.dto';
 import { AssignTeachersDto } from './dto/assign-teachers.dto';
 import { Teacher } from '../teachers/entities/teacher.entity';
 import { Student } from '../students/entities/student.entity';
+import { EnrollmentChild } from 'src/enrollment/entities/enrollment-child.entity';
+import { EnrollmentRequest } from 'src/enrollment/entities/enrollment-request.entity';
 
 @Injectable()
 export class ClassesService {
@@ -23,6 +25,10 @@ export class ClassesService {
     private readonly teachersRepo: Repository<Teacher>,
     @InjectRepository(Student)
     private readonly studentsRepo: Repository<Student>,
+        @InjectRepository(EnrollmentChild)
+        private childRepo: Repository<EnrollmentChild>,
+            @InjectRepository(EnrollmentRequest)
+            private enrollmentRepo: Repository<EnrollmentRequest>,
   ) {}
 
   async create(dto: CreateClassGroupDto): Promise<ClassGroup> {
@@ -91,7 +97,7 @@ export class ClassesService {
     const group = await this.findOne(classId);
 
     const students = await this.studentsRepo.find({
-      where: { id: In(dto.studentIds) },
+      where: { id: In(dto.childIds) },
       relations: ['classGroup'],
     });
 
@@ -125,4 +131,173 @@ export class ClassesService {
 
     return this.classesRepo.save(group);
   }
+
+
+private buildFullName(child: EnrollmentChild): string {
+    // existing student -> fullName déjà ok
+    if (child.existingStudent?.fullName) return child.existingStudent.fullName;
+
+    const fn = (child.tempFirstName || '').trim();
+    const ln = (child.tempLastName || '').trim();
+    const full = `${fn} ${ln}`.trim();
+    return full || 'Élève';
+  }
+
+  // -------------------------
+  // AFFECTER plusieurs EnrollmentChild à un groupe
+  // -------------------------
+  async assignChildrenToGroup(classId: number, childIds: number[]) {
+    const group = await this.classesRepo.findOne({
+      where: { id: classId },
+      relations: ['students'],
+    });
+    if (!group) throw new NotFoundException('ClassGroup introuvable');
+
+    // charge les childs + parent + existingStudent
+    const children = await this.childRepo.find({
+      where: { id: In(childIds) },
+      relations: ['existingStudent', 'enrollmentRequest', 'enrollmentRequest.parent'],
+    });
+
+    if (children.length !== childIds.length) {
+      const found = new Set(children.map(c => c.id));
+      const missing = childIds.filter(id => !found.has(id));
+      throw new NotFoundException(`EnrollmentChild introuvables: ${missing.join(', ')}`);
+    }
+
+    // contrôle capacité
+    if (group.maxStudents) {
+      const alreadyInGroup = group.students?.length ?? 0;
+
+      // combien vont réellement ajouter un student au groupe ?
+      // (si student existe, c’est un transfert de groupe, ça compte aussi)
+      const willAdd = children.length;
+
+      if (alreadyInGroup + willAdd > group.maxStudents) {
+        throw new BadRequestException(`Max students exceeded for class ${group.code}`);
+      }
+    }
+
+    const results: Array<{ childId: number; student: Student }> = [];
+
+    for (const child of children) {
+      const parent = child.enrollmentRequest?.parent;
+      if (!parent) throw new BadRequestException(`Parent introuvable pour child ${child.id}`);
+
+      // 1) student existe déjà ?
+      let student = child.existingStudent
+        ? await this.studentsRepo.findOne({
+            where: { id: child.existingStudent.id },
+            relations: ['classGroup', 'parent'],
+          })
+        : null;
+
+      // 2) sinon, on le crée
+      if (!student) {
+        // index = nb d'enfants déjà existants pour ce parent
+        const currentCount = await this.studentsRepo.count({
+          where: { parent: { id: parent.id } },
+        });
+
+        const familyCode = parent.familyCode ?? 'F??-???';
+        const studentRef = this.generateRef(familyCode, currentCount);
+
+        student = this.studentsRepo.create({
+          fullName: this.buildFullName(child),
+          studentRef,
+          parent,
+          classGroup: group, // affectation directe
+        });
+
+        student = await this.studentsRepo.save(student);
+
+        // lier le child au student créé
+        child.existingStudent = student;
+      } else {
+        // student existe : on l’affecte au groupe
+        student.classGroup = group;
+        student = await this.studentsRepo.save(student);
+      }
+
+      // 3) persister le choix de groupe sur l’enfant (si tu veux garder la trace)
+      child.targetClassGroup = group;
+      await this.childRepo.save(child);
+
+      results.push({ childId: child.id, student });
+    }
+
+    // renvoyer le groupe rechargé (avec students) + détails
+    const reloaded = await this.classesRepo.findOne({
+      where: { id: classId },
+      relations: ['teachers', 'students'],
+    });
+
+    return {
+      ok: true,
+      group: reloaded,
+      assigned: results,
+    };
+  }
+
+
+
+  private generateRef(familyCode: string, index: number): string {
+    // index = 0 → A, 1 → B, 2 → C, ...
+    const baseCharCode = 'A'.charCodeAt(0);
+    const letter = String.fromCharCode(baseCharCode + index);
+    return `${familyCode}${letter}`;
+  }
+
+  
+  async removeStudentFromGroup(groupId: number, studentId: number) {
+    // 1) vérifier le groupe
+    const group = await this.classesRepo.findOne({
+      where: { id: groupId },
+    });
+    if (!group) {
+      throw new NotFoundException('ClassGroup introuvable');
+    }
+
+    // 2) charger l’étudiant
+    const student = await this.studentsRepo.findOne({
+      where: { id: studentId },
+      relations: ['classGroup', 'parent'],
+    });
+    if (!student) {
+      throw new NotFoundException(`Student #${studentId} introuvable`);
+    }
+
+    // 3) vérifier qu’il appartient bien à ce groupe
+    if (!student.classGroup || student.classGroup.id !== groupId) {
+      throw new BadRequestException(
+        'Cet élève n’est pas affecté à ce groupe',
+      );
+    }
+
+    // 4) retirer l’affectation
+    student.classGroup = null;
+    await this.studentsRepo.save(student);
+
+    // 5) optionnel mais très conseillé :
+    // nettoyer le lien côté EnrollmentChild
+    const child = await this.childRepo.findOne({
+      where: {
+        existingStudent: { id: student.id },
+      },
+      relations: ['targetClassGroup'],
+    });
+
+    if (child) {
+      child.targetClassGroup = undefined;
+      await this.childRepo.save(child);
+    }
+
+    return {
+      ok: true,
+      studentId,
+      groupId,
+    };
+  }
 }
+
+

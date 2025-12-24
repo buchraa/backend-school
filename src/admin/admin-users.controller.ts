@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Get, Patch, Param } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Get, Patch, Param, ParseIntPipe, Delete } from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -96,5 +96,16 @@ export class AdminUsersController {
         return this.svc.getAlerts();
     }
 
+@Get(':id')
+  getUserById(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.getUserById(id);
+  }
 
+
+    @Delete(':id')
+    removeUser(@Param('id') id: string) {
+      return this.usersService.remove(+id);
+    }
+
+    
 }

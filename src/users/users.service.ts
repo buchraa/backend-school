@@ -9,6 +9,7 @@ import { Staff } from 'src/staff/entities/staff.entity';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/update-user.dto';
+import { AdminUserDetailDto, ProfileType } from './dto/admin-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -98,7 +99,65 @@ async remove(id: number) {
   return { ok: true };
 }
 
+async getUserById(id: number): Promise<AdminUserDetailDto> {
+    const user = await this.usersRepo.findOne({
+      where: { id },
+      // ✅ si tes relations ne sont PAS eager, garde ça :
+      relations: ['parent', 'teacher', 'staff'],
+    });
 
+    if (!user) {
+      throw new NotFoundException(`User #${id} not found`);
+    }
+
+    // ---- déterminer le profil "métier"
+    let profileType: ProfileType = null;
+    let profileId: number | null = null;
+    let profile: any | null = null;
+
+    if (user.parent) {
+      profileType = 'PARENT';
+      profileId = user.parent.id;
+      profile = user.parent;
+    } else if (user.teacher) {
+      profileType = 'TEACHER';
+      profileId = user.teacher.id;
+      profile = user.teacher;
+    } else if (user.staff) {
+      // si tu distingues STAFF vs BENEVOL via role
+      profileType = user.role === Role.BENEVOL ? 'BENEVOL' : 'STAFF';
+      profileId = user.staff.id;
+      profile = user.staff;
+    } else {
+      // ex: ADMIN sans profil métier lié
+      profileType = user.role === Role.ADMIN ? 'ADMIN' : null;
+      profileId = null;
+      profile = null;
+    }
+
+    const fullName =
+      (profile?.fullName as string | undefined) ??
+      null;
+
+    // ✅ On NE renvoie PAS passwordHash
+    const dto: AdminUserDetailDto = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+
+      fullName,
+
+      profileType,
+      profileId,
+      profile,
+
+      // si tu as ces champs, sinon enlève
+      // createdAt: (user as any).createdAt,
+      // isActive: (user as any).isActive,
+    };
+
+    return dto;
+  }
 
 }
 

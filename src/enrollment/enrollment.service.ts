@@ -12,6 +12,15 @@ import { AuthService } from '../auth/auth.service';
 import { Role } from 'src/auth/role.enum';
 import { Student } from 'src/students/entities/student.entity';
 import { SchoolYearService } from 'src/schoolYear/schoolYear.service';
+import { ClassGroup } from 'src/classes/entities/class-group.entity';
+import { In} from 'typeorm';
+
+type ListFilters = {
+  q?: string;
+  status?: 'ALL' | 'SUBMITTED' | 'UNDER_REVIEW' | 'PENDING_TEST' | 'VALIDATED' | 'REJECTED' | 'DRAFT';
+  assigned?: 'ALL' | '0' | '1';
+  schoolYearId?: number;
+};
 
 @Injectable()
 export class EnrollmentService {
@@ -35,7 +44,9 @@ export class EnrollmentService {
     private studentRepo: Repository<Student>,
 
     private authService: AuthService,
-    private readonly svc: SchoolYearService
+    private readonly svc: SchoolYearService,
+    @InjectRepository(ClassGroup)
+        private readonly classRepo: Repository<ClassGroup>,
   ) {}
 
   // -------- PUBLIC ENROLLMENT (nouveau parent)
@@ -304,5 +315,34 @@ private async generateFamilyCode(): Promise<string> {
 
   return `F${yearSuffix}-${paddedNumber}`;
 }
+
+ async searchEnrollmentChildren(search: string) {
+  const q = `%${search.toLowerCase()}%`;
+    if (!q) return [];
+
+     const students = await this.childRepo
+      .createQueryBuilder('c')
+      .leftJoinAndSelect('c.enrollmentRequest', 'req')
+      .leftJoinAndSelect('req.parent', 'parent')
+      .leftJoinAndSelect('c.existingStudent', 'student')
+      .leftJoinAndSelect('c.targetClassGroup', 'target')
+    .where('LOWER(c.tempFirstName) LIKE :q', { q })
+    .orWhere('LOWER(c.tempLastName) LIKE :q', { q })
+    //.orWhere('LOWER(s.fullName) LIKE :q', { term })
+      .orderBy('c.id', 'DESC')
+      .limit(50)
+      .getMany();
+
+        return students.map((c) => ({
+    id: c.id,
+    fullName: `${c.tempFirstName} ${c.tempLastName}`,
+    level: c.desiredLevel,
+    existingStudent: c.existingStudent,
+    parentName: c.enrollmentRequest.parent?.fullName,
+    familyCode: c.enrollmentRequest.parent?.familyCode,
+  }));
+  }
+
   
+
 }

@@ -5,11 +5,14 @@ import { UsersService } from './users.service';
 import { Parent } from 'src/parents/entities/parent.entity';
 import { Teacher } from 'src/teachers/entities/teacher.entity';
 import { Staff } from 'src/staff/entities/staff.entity';
+import { UsersController } from './users.controller';
 
 @Module({
   imports: [TypeOrmModule.forFeature([User, Parent, Teacher, Staff])],
   providers: [UsersService],
   exports: [UsersService],
+//controllers: [UsersController],
+  
 })
 export class UsersModule {}
 
