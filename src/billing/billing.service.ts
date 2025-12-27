@@ -42,7 +42,7 @@ async generateForMonth(year: number, month: number): Promise<void> {
     const childrenCount = parent.children ? parent.children.length : 0;
     const expectedAmount = this.computeMonthlyFee(childrenCount);
 
-    const dueDate = new Date(year, month - 1, 5);
+    const dueDate = new Date(year, month, 5);
 
     let billing = await this.billingRepo.findOne({
       where: { parent: { id: parent.id }, year, month },

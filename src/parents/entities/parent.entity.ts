@@ -17,8 +17,8 @@ familyCode: string;
   phone: string;
 
   @Column({ nullable: true })
-  email: string;
+  email?: string;
 
   @OneToMany(() => Student, (student) => student.parent)
-  children: Student[];
+  children?: Student[];
 }

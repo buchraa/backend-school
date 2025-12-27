@@ -8,7 +8,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Parent } from '../../parents/entities/parent.entity';
-import { Payment } from 'src/payments/entities/payment.entity';
+import { Payment } from '../../payments/entities/payment.entity';
 
 export enum FamilyBillingStatus {
   PENDING = 'PENDING',

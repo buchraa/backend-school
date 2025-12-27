@@ -60,7 +60,7 @@ import { EnrollmentModule } from './enrollment/enrollment.module';
         host: process.env.DB_HOST,
         port: parseInt(process.env.DB_PORT ?? '5432', 10),
         username: process.env.DB_USER,
-        password: process.env.DB_PASS || undefined,
+        password: process.env.DB_PASSWORD || undefined,
         database: process.env.DB_NAME,
        autoLoadEntities: true, 
         synchronize: true, // OK en DEV, à mettre à false en prod
@@ -83,6 +83,7 @@ import { EnrollmentModule } from './enrollment/enrollment.module';
     TeachersModule,
 
     StaffModule,
+    ParentsModule
 
     // Tu ajouteras tes modules métier ici (ParentsModule, StudentsModule, etc.)
   ],
