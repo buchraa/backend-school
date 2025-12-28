@@ -38,8 +38,14 @@ export class User {
   teacher: Teacher | null;
 
   @OneToOne(() => Staff, { nullable: true, eager: true })
-@JoinColumn()
-staff: Staff | null;
+  @JoinColumn()
+  staff: Staff | null;
+
+    @Column({ type: 'varchar', nullable: true })
+  resetPasswordToken: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  resetPasswordExpiresAt: Date | null;
 
 }
 export { Role };

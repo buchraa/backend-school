@@ -27,8 +27,9 @@ export class BillingController {
 
   @Post('generate')
   @Roles(Role.ADMIN, Role.BENEVOL)
-  generate(@Body() body: { year: number; month: number }) {
-    return this.billingService.generateForMonth(body.year, body.month);
+  async generate(@Body() body: { year: number; month: number }) {
+    await  this.billingService.generateForMonth(body.year, body.month);
+    return {success: true};
   }
 
   @Get('status')

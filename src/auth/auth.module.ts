@@ -8,9 +8,12 @@ import { ParentsModule } from '../parents/parents.module';
 import { AuthController } from './auth.controller';
 import { TeachersModule } from '../teachers/teachers.module';
 import { StaffModule } from 'src/staff/staff.module';
+import { MailService } from 'src/mail/mail.service';
+import { User } from 'src/users/entities/user.entity';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 @Module({
-  imports: [
+  imports: [TypeOrmModule.forFeature([User]),
     UsersModule,
     ParentsModule,
     TeachersModule,
@@ -24,7 +27,7 @@ import { StaffModule } from 'src/staff/staff.module';
       },
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, MailService],
   controllers: [AuthController],
   exports: [AuthService],
 })

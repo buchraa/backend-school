@@ -14,11 +14,17 @@ import { SignupAdminDto } from '../admin/dto/signup-admin.dto';
 import { CreateTeacherUserDto } from '../admin/dto/create-teacher-user.dto';
 import { TeachersService } from '../teachers/teachers.service';
 import { StaffService } from '../staff/staff.service';
-import { CreateStaffUserDto } from '../admin/dto/create-staff-user.dto'; ;
+import { CreateStaffUserDto } from '../admin/dto/create-staff-user.dto';import { MailService } from 'src/mail/mail.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { User } from 'src/users/entities/user.entity';
+import { Repository } from 'typeorm';
+import * as crypto from 'crypto'; 
 
 @Injectable()
 export class AuthService {
     constructor(
+         @InjectRepository(User) private userRepo: Repository<User>,
+         private mail: MailService,
         private readonly usersService: UsersService,
         private readonly jwtService: JwtService,
         private readonly parentsService: ParentsService,
@@ -229,7 +235,56 @@ async hashPassword(plain: string): Promise<string> {
     return bcrypt.compare(plain, hash);
   }
 
-  
+  async forgotPassword(email: string) {
+    const normalized = email.trim().toLowerCase();
+
+    // ✅ IMPORTANT: ne jamais dire si le mail existe (anti-attaque)
+    const user = await this.userRepo.findOne({ where: { email: normalized } });
+
+    if (!user) {
+      return { ok: true }; // même réponse
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 1000 * 60 * 30); // 30 minutes
+
+    user.resetPasswordToken = token;
+    user.resetPasswordExpiresAt = expires;
+    await this.userRepo.save(user);
+
+    const frontUrl = process.env.FRONT_URL; 
+    // ex: https://darousalam.com (ou ton domaine)
+    const resetUrl = `${frontUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+    await this.mail.sendForgotPasswordEmail({
+      to: user.email,
+      fullName: (user.parent as any)?.fullName || (user.teacher as any)?.fullName || (user.staff as any)?.fullName,
+      resetUrl,
+    });
+
+    return { ok: true };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const user = await this.userRepo.findOne({ where: { resetPasswordToken: token } });
+
+    if (!user || !user.resetPasswordExpiresAt) {
+      throw new BadRequestException('Token invalide.');
+    }
+
+    if (user.resetPasswordExpiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('Token expiré.');
+    }
+
+    user.passwordHash = await this.hashPassword(newPassword);
+    user.resetPasswordToken = null;
+    user.resetPasswordExpiresAt = null;
+
+    await this.userRepo.save(user);
+
+    return { ok: true };
+  }
+
 
 }
 

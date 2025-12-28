@@ -25,12 +25,13 @@ import { EnrollmentRequest } from 'src/enrollment/entities/enrollment-request.en
 import { SchoolYearService } from 'src/schoolYear/schoolYear.service';
 import { SchoolYear } from 'src/schoolYear/entities/school-year.entity';
 import { JwtStrategy } from 'src/auth/jwt.strategy';
+import { MailService } from 'src/mail/mail.service';
 
 
 @Module({
   imports: [TypeOrmModule.forFeature([Parent, User, Student, Teacher, Staff, Subject, ClassGroup, EnrollmentRequest, SchoolYear]),AuthModule, StudentsModule, ParentsModule, AuthModule, UsersModule, TeachersModule, StaffModule],
   controllers: [AdminUsersController],
-  providers: [ParentsService, UsersService, AuthService, JwtService, TeachersService, StaffService, AdminDashboardService, SchoolYearService,],
+  providers: [MailService, ParentsService, UsersService, AuthService, JwtService, TeachersService, StaffService, AdminDashboardService, SchoolYearService,],
   
 })
 export class AdminModule {}

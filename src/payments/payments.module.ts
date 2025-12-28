@@ -23,11 +23,12 @@ import { Teacher } from 'src/teachers/entities/teacher.entity';
 import { Staff } from 'src/staff/entities/staff.entity';
 import { Subject } from 'rxjs';
 import { ClassGroup } from 'src/classes/entities/class-group.entity';
+import { MailService } from 'src/mail/mail.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([EnrollmentRequest, EnrollmentChild, User,Payment, Parent, FamilyBilling, SchoolYear, Student, User, Parent, Teacher, Staff, Subject, ClassGroup])],
   controllers: [PaymentsController],
-  providers: [PaymentsService, EnrollmentService, AuthService, SchoolYearService, UsersService, JwtService, TeachersService, ParentsService, StaffService],
+  providers: [MailService, PaymentsService, EnrollmentService, AuthService, SchoolYearService, UsersService, JwtService, TeachersService, ParentsService, StaffService],
   exports: [PaymentsService],
 })
 export class PaymentsModule {}
