@@ -193,6 +193,7 @@ async startEnrollmentForParent(parentId: number) {
     }
 
     if (dto.submit) {
+      console.log('STATUS', dto.submit)
       enr.status = EnrollmentStatus.SUBMITTED;
     }
 

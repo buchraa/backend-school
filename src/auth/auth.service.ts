@@ -19,10 +19,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto'; 
+import { ParentSignupDto } from './dto/parent-signup.dto';
+import { normalizeFamilyCode, last4 } from '../utils/normalize';
+import { Parent } from 'src/parents/entities/parent.entity';
 
 @Injectable()
 export class AuthService {
     constructor(
+            @InjectRepository(Parent) private readonly parentRepo: Repository<Parent>,
+            
          @InjectRepository(User) private userRepo: Repository<User>,
          private mail: MailService,
         private readonly usersService: UsersService,
@@ -285,6 +290,58 @@ async hashPassword(plain: string): Promise<string> {
     return { ok: true };
   }
 
+async parentSignup(dto: ParentSignupDto) {
+    const familyCode = normalizeFamilyCode(dto.familyCode);
+    const email = dto.email.trim().toLowerCase();
 
+    const parent = await this.parentRepo.findOne({ where: { familyCode } });
+    if (!parent) throw new BadRequestException("Référence famille introuvable.");
+
+    // Vérif téléphone: comparer les 4 derniers chiffres (robuste aux formats)
+    const p4 = last4(parent.phone ?? '');
+    const u4 = last4(dto.phone ?? '');
+    if (!p4 || !u4 || p4 !== u4) {
+      throw new BadRequestException("Téléphone non valide (derniers 4 chiffres).");
+    }
+
+    const existingEmail = await this.userRepo.findOne({ where: { email } });
+    if (existingEmail) throw new BadRequestException("Email déjà utilisé.");
+
+    const alreadyLinked = await this.userRepo.findOne({
+      where: { parent: { id: parent.id } },
+      relations: { parent: true },
+    });
+    if (alreadyLinked) throw new BadRequestException("Un compte parent existe déjà pour cette famille.");
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    const user = this.userRepo.create({
+      email,
+      passwordHash,
+      role: Role.PARENT,
+      parent,
+    });
+
+    await this.userRepo.save(user);
+
+    // option: auto-login
+    return this.signJwt(user); // { accessToken, user }
+  }
+    signJwt(user: User) {
+ // 3) Générer le JWT
+        const payload = {
+            sub: user.id,
+            email: user.email,
+            role: user.role,
+        };
+
+        return {
+         
+            access_token: this.jwtService.sign(payload),
+            user
+        };
+    }
+
+  
 }
 

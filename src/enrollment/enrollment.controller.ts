@@ -63,6 +63,7 @@ assignChildToGroup(
     @Roles(Role.PARENT)
     @Patch('update')
     update(@Req() req, @Body() dto: UpdateEnrollmentDto) {
+        console.log(dto);
         return this.service.updateEnrollment(req.user.parentId, dto);
     }
 

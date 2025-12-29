@@ -11,9 +11,10 @@ import { StaffModule } from 'src/staff/staff.module';
 import { MailService } from 'src/mail/mail.service';
 import { User } from 'src/users/entities/user.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Parent } from 'src/parents/entities/parent.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User]),
+  imports: [TypeOrmModule.forFeature([User, Parent]),
     UsersModule,
     ParentsModule,
     TeachersModule,
