@@ -9,7 +9,7 @@ export class MailService {
     return this.mailer.sendMail({ to, subject, html });
   }
 
-    async sendPaymentReminder(email: string, amount: number, month: string) {
+    async sendPaymentReminder(email: string, amount: number, month: number) {
     return this.send(
       email,
       `Rappel de paiement – ${month}`,
@@ -28,6 +28,7 @@ export class MailService {
     fullName?: string;
     resetUrl: string;
   }) {
+    console.log(process.env.MAIL_HOST, process.env.MAIL_USER,)
     const name = params.fullName?.trim() || 'Bonjour';
     console.log('RESET LINK:', params.resetUrl);
     return this.send(

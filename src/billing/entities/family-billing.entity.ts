@@ -57,4 +57,12 @@ export class FamilyBilling {
   })
   status: FamilyBillingStatus;
 
+  @Column({ type: 'timestamp', nullable: true })
+reminder10SentAt: Date | null;
+
+@Column({ type: 'timestamp', nullable: true })
+reminder15SentAt: Date | null;
+
+@Column({ default: false })
+reminded: boolean;
 }

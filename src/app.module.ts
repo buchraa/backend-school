@@ -24,7 +24,7 @@ import { MeModule } from './me/me.module';
 import { StaffModule } from './staff/staff.module';
 import { EnrollmentModule } from './enrollment/enrollment.module';
 import { MailModule } from './mail/mail.module';
-
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
     providers: [
@@ -37,7 +37,7 @@ import { MailModule } from './mail/mail.module';
   imports: [
     // Permet d'utiliser process.env partout
     SubjectsModule,
-    MailModule,
+
     EnrollmentModule,
     StaffModule,
     ClassesModule,
@@ -51,10 +51,11 @@ import { MailModule } from './mail/mail.module';
     UsersModule,
     AuthModule,
     AdminModule,
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-
+    MailModule,
     // Connexion PostgreSQL + TypeORM
     TypeOrmModule.forRootAsync({
       useFactory: () => ({
