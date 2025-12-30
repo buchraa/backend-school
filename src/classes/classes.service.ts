@@ -15,6 +15,7 @@ import { Teacher } from '../teachers/entities/teacher.entity';
 import { Student } from '../students/entities/student.entity';
 import { EnrollmentChild } from 'src/enrollment/entities/enrollment-child.entity';
 import { EnrollmentRequest } from 'src/enrollment/entities/enrollment-request.entity';
+import { Parent } from 'src/parents/entities/parent.entity';
 
 @Injectable()
 export class ClassesService {
@@ -194,13 +195,10 @@ private buildFullName(child: EnrollmentChild): string {
 
       // 2) sinon, on le crée
       if (!student) {
-        // index = nb d'enfants déjà existants pour ce parent
-        const currentCount = await this.studentsRepo.count({
-          where: { parent: { id: parent.id } },
-        });
 
-        const familyCode = parent.familyCode ?? 'F??-???';
-        const studentRef = this.generateRef(familyCode, currentCount);
+
+        const studentRef = await this.generateStudentRef(parent);
+
 
         student = this.studentsRepo.create({
           fullName: this.buildFullName(child),
@@ -239,6 +237,48 @@ private buildFullName(child: EnrollmentChild): string {
     };
   }
 
+  private numToLetters(n: number): string {
+  // 1 -> A, 2 -> B, ... 26 -> Z, 27 -> AA, ...
+  let s = '';
+  while (n > 0) {
+    n--; // base 26
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26);
+  }
+  return s;
+}
+
+private async generateStudentRef(parent: Parent): Promise<string> {
+  const base = parent.familyCode; // ex: F25-001
+
+  // On récupère le dernier student du parent (rapide)
+  const last = await this.studentsRepo.findOne({
+    where: { parent: { id: parent.id } },
+    select: { id: true, studentRef: true },
+    order: { id: 'DESC' },
+  });
+
+  // Format attendu: F25-001-001A (num + lettres à la fin)
+  // On extrait le numéro si possible
+  let nextNum = 1;
+
+  if (last?.studentRef) {
+    const m = last.studentRef.match(/-(\d+)([A-Z]+)$/); // ex: "-001A" ou "-027AA"
+    if (m) {
+      nextNum = Number(m[1]) + 1;
+    } else {
+      // fallback si ancien format
+      const count = await this.studentsRepo.count({ where: { parent: { id: parent.id } } });
+      nextNum = count + 1;
+    }
+  }
+
+  const letters = this.numToLetters(nextNum); // 1->A, 2->B, 27->AA...
+  const padded = String(nextNum).padStart(3, '0'); // 001, 002...
+
+  return `${base}-${padded}${letters}`; // F25-001-001A
+}
+
 
 
   private generateRef(familyCode: string, index: number): string {
@@ -248,6 +288,7 @@ private buildFullName(child: EnrollmentChild): string {
     return `${familyCode}${letter}`;
   }
 
+  
   
   async removeStudentFromGroup(groupId: number, studentId: number) {
     // 1) vérifier le groupe

@@ -201,18 +201,48 @@ async startEnrollmentForParent(parentId: number) {
   }
 
   // utilitaire exemple pour générer un studentRef (tu peux réutiliser ta logique existante)
-  private async generateStudentRef(parent: Parent): Promise<string> {
-    // ex : F25-001A, F25-001B… selon tes règles
-    // ici on fait simple : familyCode + lettre
-    const base = parent.familyCode; // ex: F25-001
-    const existing = await this.studentRepo.find({
-      where: { parent: { id: parent.id } },
-      order: { id: 'ASC' },
-    });
-    const index = existing.length; // 0,1,2...
-    const letter = String.fromCharCode('A'.charCodeAt(0) + index);
-    return `${base}${letter}`;
+private numToLetters(n: number): string {
+  // 1 -> A, 2 -> B, ... 26 -> Z, 27 -> AA, ...
+  let s = '';
+  while (n > 0) {
+    n--; // base 26
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26);
   }
+  return s;
+}
+
+private async generateStudentRef(parent: Parent): Promise<string> {
+  const base = parent.familyCode; // ex: F25-001
+
+  // On récupère le dernier student du parent (rapide)
+  const last = await this.studentRepo.findOne({
+    where: { parent: { id: parent.id } },
+    select: { id: true, studentRef: true },
+    order: { id: 'DESC' },
+  });
+
+  // Format attendu: F25-001-001A (num + lettres à la fin)
+  // On extrait le numéro si possible
+  let nextNum = 1;
+
+  if (last?.studentRef) {
+    const m = last.studentRef.match(/-(\d+)([A-Z]+)$/); // ex: "-001A" ou "-027AA"
+    if (m) {
+      nextNum = Number(m[1]) + 1;
+    } else {
+      // fallback si ancien format
+      const count = await this.studentRepo.count({ where: { parent: { id: parent.id } } });
+      nextNum = count + 1;
+    }
+  }
+
+  const letters = this.numToLetters(nextNum); // 1->A, 2->B, 27->AA...
+  const padded = String(nextNum).padStart(3, '0'); // 001, 002...
+
+  return `${base}-${padded}${letters}`; // F25-001-001A
+}
+
 
 async updateStatus(enrollmentId: number, newStatus: EnrollmentStatus) {
   const enr = await this.enrollmentRepo.findOne({
@@ -298,23 +328,21 @@ async getRequestById(id: number) {
 
 
 private async generateFamilyCode(): Promise<string> {
-  const currentYear = new Date().getFullYear();
-  const yearSuffix = currentYear.toString().slice(-2); // ex: "25"
+  const yearSuffix = String(new Date().getFullYear()).slice(-2); // "25"
+  const prefix = `F${yearSuffix}-`;
 
-  // Compter combien de parents ont déjà un code de cette année
-  const count = await this.parentRepo.count({
-    where: {
-      familyCode: Like(`F${yearSuffix}-%`)
-    }
+  const last = await this.parentRepo.findOne({
+    where: { familyCode: Like(`${prefix}%`) },
+    select: { familyCode: true },
+    order: { familyCode: 'DESC' }, // <-- CRUCIAL
   });
 
-  // Le prochain numéro, +1
-  const nextNumber = count + 1;
+  const lastNum = last?.familyCode
+    ? Number(last.familyCode.replace(prefix, ''))
+    : 0;
 
-  // Format sur 3 chiffres => "001", "023", etc.
-  const paddedNumber = nextNumber.toString().padStart(3, '0');
-
-  return `F${yearSuffix}-${paddedNumber}`;
+  const nextNum = lastNum + 1;
+  return `${prefix}${String(nextNum).padStart(3, '0')}`; // F25-001
 }
 
  async searchEnrollmentChildren(search: string) {

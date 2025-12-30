@@ -34,23 +34,21 @@ export class ParentsService {
   }
 
 private async generateFamilyCode(): Promise<string> {
-  const currentYear = new Date().getFullYear();
-  const yearSuffix = currentYear.toString().slice(-2); // ex: "25"
+  const yearSuffix = String(new Date().getFullYear()).slice(-2); // "25"
+  const prefix = `F${yearSuffix}-`;
 
-  // Compter combien de parents ont déjà un code de cette année
-  const count = await this.parentsRepo.count({
-    where: {
-      familyCode: Like(`F${yearSuffix}-%`)
-    }
+  const last = await this.parentsRepo.findOne({
+    where: { familyCode: Like(`${prefix}%`) },
+    select: { familyCode: true },
+    order: { familyCode: 'DESC' }, // <-- CRUCIAL
   });
 
-  // Le prochain numéro, +1
-  const nextNumber = count + 1;
+  const lastNum = last?.familyCode
+    ? Number(last.familyCode.replace(prefix, ''))
+    : 0;
 
-  // Format sur 3 chiffres => "001", "023", etc.
-  const paddedNumber = nextNumber.toString().padStart(3, '0');
-
-  return `F${yearSuffix}-${paddedNumber}`;
+  const nextNum = lastNum + 1;
+  return `${prefix}${String(nextNum).padStart(3, '0')}`; // F25-001
 }
 
 

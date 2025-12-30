@@ -29,25 +29,23 @@ export class ImportParentsService {
         return found ? row[found] : undefined;
     }
 
-    private async generateFamilyCode(): Promise<string> {
-      const currentYear = new Date().getFullYear();
-      const yearSuffix = currentYear.toString().slice(-2); // ex: "25"
-    
-      // Compter combien de parents ont déjà un code de cette année
-      const count = await this.parentRepo.count({
-        where: {
-          familyCode: Like(`F${yearSuffix}-%`)
-        }
-      });
-    
-      // Le prochain numéro, +1
-      const nextNumber = count + 1;
-    
-      // Format sur 3 chiffres => "001", "023", etc.
-      const paddedNumber = nextNumber.toString().padStart(3, '0');
-    
-      return `F${yearSuffix}-${paddedNumber}`;
-    }
+private async generateFamilyCode(): Promise<string> {
+  const yearSuffix = String(new Date().getFullYear()).slice(-2); // "25"
+  const prefix = `F${yearSuffix}-`;
+
+  const last = await this.parentRepo.findOne({
+    where: { familyCode: Like(`${prefix}%`) },
+    select: { familyCode: true },
+    order: { familyCode: 'DESC' }, // <-- CRUCIAL
+  });
+
+  const lastNum = last?.familyCode
+    ? Number(last.familyCode.replace(prefix, ''))
+    : 0;
+
+  const nextNum = lastNum + 1;
+  return `${prefix}${String(nextNum).padStart(3, '0')}`; // F25-001
+}
 
     private generateRef(familyCode: string, index: number): string {
     // index = 0 → A, 1 → B, 2 → C, ...

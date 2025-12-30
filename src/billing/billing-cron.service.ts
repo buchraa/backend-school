@@ -16,7 +16,7 @@ export class BillingCronService {
   ) {}
 
   // Tous les 1er du mois à 02h du matin
-  @Cron('0 2 1 * *')
+  /*@Cron('0 2 1 * *')
   async generateMonthlyBills() {
     const now = new Date();
 
@@ -69,7 +69,7 @@ export class BillingCronService {
       await this.billingRepo.save(b);
     }
   }
-
+*/
 
   private computeDueDate(year: number, month: number): Date {
   // facture du mois "month" -> échéance le 5 du mois suivant

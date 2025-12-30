@@ -8,9 +8,10 @@ import { Teacher } from '../teachers/entities/teacher.entity';
 import { Student } from '../students/entities/student.entity';
 import { EnrollmentChild } from 'src/enrollment/entities/enrollment-child.entity';
 import { EnrollmentRequest } from 'src/enrollment/entities/enrollment-request.entity';
+import { Parent } from 'src/parents/entities/parent.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ClassGroup, Teacher, Student, EnrollmentChild, EnrollmentRequest,])],
+  imports: [TypeOrmModule.forFeature([Parent, ClassGroup, Teacher, Student, EnrollmentChild, EnrollmentRequest,])],
   controllers: [ClassesController],
   providers: [ClassesService],
   exports: [ClassesService],
