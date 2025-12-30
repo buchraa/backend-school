@@ -13,7 +13,8 @@ import { Role } from 'src/auth/role.enum';
 import { Student } from 'src/students/entities/student.entity';
 import { SchoolYearService } from 'src/schoolYear/schoolYear.service';
 import { ClassGroup } from 'src/classes/entities/class-group.entity';
-import { In} from 'typeorm';
+import { Brackets } from 'typeorm';
+
 
 type ListFilters = {
   q?: string;
@@ -345,99 +346,100 @@ private async generateFamilyCode(): Promise<string> {
   return `${prefix}${String(nextNum).padStart(3, '0')}`; // F25-001
 }
 
- /*async searchEnrollmentChildren(search: string) {
-  const q = `%${search.toLowerCase()}%`;
-    if (!q) return [];
 
-     const students = await this.childRepo
-      .createQueryBuilder('c')
-      .leftJoinAndSelect('c.enrollmentRequest', 'req')
-      .leftJoinAndSelect('req.parent', 'parent')
-      .leftJoinAndSelect('c.existingStudent', 'student')
-      .leftJoinAndSelect('c.targetClassGroup', 'target')
-    .where('LOWER(c.tempFirstName) LIKE :q', { q })
-    .orWhere('LOWER(c.tempLastName) LIKE :q', { q })
-    //.orWhere('LOWER(s.fullName) LIKE :q', { term })
-      .orderBy('c.id', 'DESC')
-      .limit(50)
-      .getMany();
 
-        return students.map((c) => ({
-    id: c.id,
-    fullName: `${c.tempFirstName} ${c.tempLastName}`,
-    level: c.desiredLevel,
-    existingStudent: c.existingStudent,
-    parentName: c.enrollmentRequest.parent?.fullName,
-    familyCode: c.enrollmentRequest.parent?.familyCode,
-  }));
-  }*/
+async searchEnrollmentChildren(search: string) {
+  const s = (search || '');
+  if (!s) return [];
 
-  async searchEnrollmentChildren(search: string) {
-const q = `%${search.toLowerCase()}%`;
-    if (!q) return [];
+  // tokens: "fat ndiaye" => ["fat","ndiaye"]
+  const tokens = s.toLowerCase().split(/\s+/).slice(0, 5); // limite anti-abus
+  const take = 50;
 
   // 1) Enfants issus des demandes (nouvelle inscription / réinscription)
-  const enrollmentChildren = await this.childRepo
+  const qbChild = this.childRepo
     .createQueryBuilder('c')
     .leftJoinAndSelect('c.enrollmentRequest', 'req')
     .leftJoinAndSelect('req.parent', 'parent')
     .leftJoinAndSelect('c.existingStudent', 'existingStudent')
     .leftJoinAndSelect('c.targetClassGroup', 'target')
-    .where('LOWER(c.tempFirstName) LIKE :q', { q })
-    .orWhere('LOWER(c.tempLastName) LIKE :q', { q })
     .orderBy('c.id', 'DESC')
-    .limit(50)
-    .getMany();
+    .take(take);
 
-  // 2) Students existants (déjà dans la base)
-  const students = await this.studentRepo
-    .createQueryBuilder('s')
-    .leftJoinAndSelect('s.parent', 'parent')
-    .leftJoinAndSelect('s.classGroup', 'classGroup') // adapte si ton champ s’appelle autrement
-    .where('LOWER(s.fullName) LIKE :q', { q })
-    // si tu as firstName/lastName séparés, ajoute aussi :
-    // .orWhere('LOWER(s.firstName) LIKE :q', { q })
-    // .orWhere('LOWER(s.lastName) LIKE :q', { q })
-    .orderBy('s.id', 'DESC')
-    .limit(50)
-    .getMany();
+  // AND sur tokens, OR sur champs
+  qbChild.andWhere(new Brackets((andQb) => {
+    tokens.forEach((t, idx) => {
+      const p = `t${idx}`;
+      andQb.andWhere(new Brackets((orQb) => {
+        orQb
+          .where(`LOWER(c.tempFirstName) ILIKE :${p}`, { [p]: `%${t}%` })
+          .orWhere(`LOWER(c.tempLastName) ILIKE :${p}`, { [p]: `%${t}%` })
+          .orWhere(`LOWER(parent.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
+          .orWhere(`LOWER(parent.familyCode) ILIKE :${p}`, { [p]: `%${t}%` })
+          // si réinscription -> existingStudent plein
+          .orWhere(`LOWER(existingStudent.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
+          .orWhere(`LOWER(existingStudent.studentRef) ILIKE :${p}`, { [p]: `%${t}%` });
+      }));
+    });
+  }));
 
-  // Normalisation : même format pour le front
+  const enrollmentChildren = await qbChild.getMany();
+
+  // 2) Students existants
+  const qbStudent = this.studentRepo
+    .createQueryBuilder('st')
+    .leftJoinAndSelect('st.parent', 'parent')
+    .leftJoinAndSelect('st.classGroup', 'classGroup')
+    .orderBy('st.id', 'DESC')
+    .take(take);
+
+  qbStudent.andWhere(new Brackets((andQb) => {
+    tokens.forEach((t, idx) => {
+      const p = `t${idx}`;
+      andQb.andWhere(new Brackets((orQb) => {
+        orQb
+          .where(`LOWER(st.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
+          .orWhere(`LOWER(st.studentRef) ILIKE :${p}`, { [p]: `%${t}%` })
+          .orWhere(`LOWER(parent.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
+          .orWhere(`LOWER(parent.familyCode) ILIKE :${p}`, { [p]: `%${t}%` });
+      }));
+    });
+  }));
+
+  const students = await qbStudent.getMany();
+
+  // 3) Normalisation : même format pour le front
   const mappedEnrollment = enrollmentChildren.map((c) => ({
     source: 'ENROLLMENT_CHILD' as const,
     id: c.id,
-    fullName: `${c.tempFirstName} ${c.tempLastName}`.trim(),
-    level: c.desiredLevel,
-    existingStudent: c.existingStudent ?? null,
+    fullName: `${c.tempFirstName ?? ''} ${c.tempLastName ?? ''}`.trim() || c.existingStudent?.fullName,
+    level: c.desiredLevel ?? null,
+    studentRef: c.existingStudent?.studentRef ?? null,
     parentName: c.enrollmentRequest?.parent?.fullName ?? null,
     familyCode: c.enrollmentRequest?.parent?.familyCode ?? null,
   }));
 
-  const mappedStudents = students.map((s) => ({
+  const mappedStudents = students.map((st) => ({
     source: 'STUDENT' as const,
-    id: s.id,
-    fullName: s.fullName,
-    level: (s as any).level ?? null, // adapte si tu as "currentLevel" etc.
-    existingStudent: s,              // ici c’est forcément un vrai student
-    parentName: (s as any).parent?.fullName ?? null,
-    familyCode: (s as any).parent?.familyCode ?? null,
+    id: st.id,
+    fullName: st.fullName,
+    level: null,
+    studentRef: st.studentRef ?? null,
+    parentName: st.parent?.fullName ?? null,
+    familyCode: st.parent?.familyCode ?? null,
   }));
 
-  // Optionnel: éviter doublons (si un student est déjà présent dans enrollment via existingStudent)
-  const seenStudentIds = new Set(
-    mappedEnrollment
-      .filter((x) => x.existingStudent?.id)
-      .map((x) => x.existingStudent?.id ),
-  );
-
-  const merged = [
-    ...mappedEnrollment,
-    ...mappedStudents.filter((x) => !seenStudentIds.has(x.id)),
-  ];
+  // 4) Fusion + dédoublonnage simple (si un student ressort aussi via enrollment)
+  const seen = new Set<string>();
+  const merged = [...mappedEnrollment, ...mappedStudents].filter((x) => {
+    const key = `${x.source}:${x.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
   return merged.slice(0, 50);
 }
-
 
   
 
