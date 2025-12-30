@@ -16,6 +16,7 @@ import { Student } from '../students/entities/student.entity';
 import { EnrollmentChild } from 'src/enrollment/entities/enrollment-child.entity';
 import { EnrollmentRequest } from 'src/enrollment/entities/enrollment-request.entity';
 import { Parent } from 'src/parents/entities/parent.entity';
+import { AssignToGroupDto } from './dto/assign-to-group.dto';
 
 @Injectable()
 export class ClassesService {
@@ -147,7 +148,7 @@ private buildFullName(child: EnrollmentChild): string {
   // -------------------------
   // AFFECTER plusieurs EnrollmentChild à un groupe
   // -------------------------
-  async assignChildrenToGroup(classId: number, childIds: number[]) {
+ /* async assignChildrenToGroup(classId: number, childIds: number[]) {
     const group = await this.classesRepo.findOne({
       where: { id: classId },
       relations: ['students'],
@@ -236,6 +237,8 @@ private buildFullName(child: EnrollmentChild): string {
       assigned: results,
     };
   }
+*/
+  
 
   private numToLetters(n: number): string {
   // 1 -> A, 2 -> B, ... 26 -> Z, 27 -> AA, ...
@@ -280,13 +283,6 @@ private async generateStudentRef(parent: Parent): Promise<string> {
 }
 
 
-
-  private generateRef(familyCode: string, index: number): string {
-    // index = 0 → A, 1 → B, 2 → C, ...
-    const baseCharCode = 'A'.charCodeAt(0);
-    const letter = String.fromCharCode(baseCharCode + index);
-    return `${familyCode}${letter}`;
-  }
 
   
   
@@ -339,6 +335,112 @@ private async generateStudentRef(parent: Parent): Promise<string> {
       groupId,
     };
   }
+
+  // dto
+
+
+
+async assignChildrenToGroup(classId: number, dto: AssignToGroupDto) {
+  const ids = (dto.childIds || []).filter(Boolean);
+  if (!ids.length) return { ok: true, added: 0, missing: [] };
+
+  const group = await this.classesRepo.findOne({
+    where: { id: classId },
+    relations: ['students'],
+  });
+  if (!group) throw new NotFoundException('ClassGroup introuvable');
+
+  // 1) Charger les EnrollmentChild correspondant aux ids
+  const children = await this.childRepo.find({
+    where: { id: In(ids) },
+    relations: [
+      'existingStudent',
+      'enrollmentRequest',
+      'enrollmentRequest.parent',
+    ],
+  });
+  const childIdsFound = new Set(children.map(c => c.id));
+
+  // 2) Les ids restants -> tenter Students
+  const remaining = ids.filter(id => !childIdsFound.has(id));
+  const students = remaining.length
+    ? await this.studentsRepo.find({
+        where: { id: In(remaining) },
+        relations: ['parent', 'classGroup'],
+      })
+    : [];
+
+  const studentIdsFound = new Set(students.map(s => s.id));
+
+  // 3) IDs introuvables
+  const missing = ids.filter(id => !childIdsFound.has(id) && !studentIdsFound.has(id));
+  // (tu peux choisir de throw si missing non vide)
+  // if (missing.length) throw new NotFoundException(`Ids introuvables: ${missing.join(', ')}`);
+
+  // 4) Capacité: combien on va réellement ajouter ?
+  const already = group.students?.length ?? 0;
+
+  // On va produire des Students finaux (issus de children + students directs)
+  const toAssign: any[] = [];
+
+  // A) Children -> Student
+  for (const child of children) {
+    let student = child.existingStudent;
+
+    // Si pas encore student => le créer
+    if (!student) {
+      const parent = child.enrollmentRequest?.parent;
+      if (!parent) {
+        // si tu veux quand même gérer un child sans parent (rare), tu peux skip ou throw
+        continue;
+      }
+
+      const studentRef = await this.generateStudentRef(parent);
+
+      student = this.studentsRepo.create({
+          fullName: this.buildFullName(child),
+          studentRef,
+          parent,
+          classGroup: group, // affectation directe
+      });
+
+      student = await this.studentsRepo.save(student);
+
+      // Lier enrollment child -> existingStudent
+      child.existingStudent = student;
+      await this.childRepo.save(child);
+    }
+
+    toAssign.push(student);
+  }
+
+  // B) Students directs
+  toAssign.push(...students);
+
+  // Dédoublonner (au cas où)
+  const uniq = new Map<number, any>();
+  for (const s of toAssign) uniq.set(s.id, s);
+  const finalStudents = [...uniq.values()];
+
+  // 5) Capacité
+  if (group.maxStudents && already + finalStudents.length > group.maxStudents) {
+    throw new BadRequestException(`Max students exceeded for class ${group.code}`);
+  }
+
+  // 6) Affectation
+  for (const s of finalStudents) {
+    s.classGroup = group;
+  }
+  await this.studentsRepo.save(finalStudents);
+
+  return {
+    ok: true,
+    added: finalStudents.length,
+    missing,
+    assignedStudentIds: finalStudents.map(s => s.id),
+  };
+}
+
 }
 
 

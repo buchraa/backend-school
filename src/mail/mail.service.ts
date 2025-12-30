@@ -9,7 +9,7 @@ export class MailService {
     return this.mailer.sendMail({ to, subject, html });
   }
 
-    async sendPaymentReminder(email: string, amount: number, month: number) {
+    async sendPaymentReminder(email: string, amount: number, month: number, stageDay: number) {
     return this.send(
       email,
       `Rappel de paiement – ${month}`,

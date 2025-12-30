@@ -21,12 +21,13 @@ import { Roles } from '../auth/roles.decorator';
 import { Role } from '../auth/role.enum';
 
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { AssignToGroupDto } from './dto/assign-to-group.dto';
 
 @ApiTags('Classes - Gestion des classes')
 @Controller('/classes')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ClassesController {
-  constructor(private readonly classesService: ClassesService) {}
+  constructor(private readonly classesService: ClassesService) { }
 
   @Post()
   @Roles(Role.ADMIN, Role.BENEVOL)
@@ -45,7 +46,7 @@ export class ClassesController {
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.classesService.findOne(id);
   }
-    @Delete('class-groups/:id')
+  @Delete('class-groups/:id')
   @Roles(Role.ADMIN)
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.classesService.remove(id);
@@ -66,9 +67,9 @@ export class ClassesController {
   @Post(':id/assign-child')
   async assignChildToGroup(
     @Param('id', ParseIntPipe) classId: number,
-    @Body() dto: AssignStudentsDto,
+    @Body() dto: AssignToGroupDto,
   ) {
-    return this.classesService.assignChildrenToGroup(classId, dto.childIds);
+    return this.classesService.assignChildrenToGroup(classId, dto);
   }
 
   // ✅ Affecter des enseignants à un groupe

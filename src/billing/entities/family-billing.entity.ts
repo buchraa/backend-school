@@ -63,6 +63,12 @@ reminder10SentAt: Date | null;
 @Column({ type: 'timestamp', nullable: true })
 reminder15SentAt: Date | null;
 
+  @Column({ type: 'timestamp', nullable: true })
+reminder20SentAt: Date | null;
+
+@Column({ type: 'timestamp', nullable: true })
+reminder25SentAt: Date | null;
+
 @Column({ default: false })
 reminded: boolean;
 }
