@@ -29,15 +29,15 @@ export class User {
   role: Role;
 
   // 🔗 Lien vers la famille (Parent)
-  @OneToOne(() => Parent, { nullable: true})
+  @OneToOne(() => Parent, { nullable: true, eager: true })
   @JoinColumn()
   parent: Parent | null;
 
-  @OneToOne(() => Teacher, { nullable: true })
+  @OneToOne(() => Teacher, { nullable: true, eager: true })
   @JoinColumn()
   teacher: Teacher | null;
 
-  @OneToOne(() => Staff, { nullable: true })
+  @OneToOne(() => Staff, { nullable: true, eager: true })
   @JoinColumn()
   staff: Staff | null;
 
