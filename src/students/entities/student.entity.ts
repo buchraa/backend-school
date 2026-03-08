@@ -14,7 +14,7 @@ export class Student {
   @Column({ nullable: true })
   studentRef: string;
 
-  @ManyToOne(() => Parent, (parent) => parent.children, { eager: true })
+  @ManyToOne(() => Parent, (parent) => parent.children)
   parent: Parent;
 
 

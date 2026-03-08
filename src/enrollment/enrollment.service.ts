@@ -47,8 +47,8 @@ export class EnrollmentService {
     private authService: AuthService,
     private readonly svc: SchoolYearService,
     @InjectRepository(ClassGroup)
-        private readonly classRepo: Repository<ClassGroup>,
-  ) {}
+    private readonly classRepo: Repository<ClassGroup>,
+  ) { }
 
   // -------- PUBLIC ENROLLMENT (nouveau parent)
   async createPublicEnrollment(dto: CreatePublicEnrollmentDto) {
@@ -59,12 +59,12 @@ export class EnrollmentService {
     if (existing) {
       throw new BadRequestException('Un compte existe déjà avec cet email.');
     }
-  let familyCode = await this.generateFamilyCode();
+    let familyCode = await this.generateFamilyCode();
 
-  // Sécurité contre collision improbable
-  while (await this.parentRepo.findOne({ where: { familyCode } })) {
-    familyCode = await this.generateFamilyCode();
-  }
+    // Sécurité contre collision improbable
+    while (await this.parentRepo.findOne({ where: { familyCode } })) {
+      familyCode = await this.generateFamilyCode();
+    }
 
 
 
@@ -72,7 +72,7 @@ export class EnrollmentService {
       fullName: dto.parent.fullName,
       email: dto.parent.email,
       phone: dto.parent.phone,
-        familyCode,
+      familyCode,
     });
 
     const savedParent = await this.parentRepo.save(parent);
@@ -89,10 +89,10 @@ export class EnrollmentService {
 
     await this.userRepo.save(user);
 
-const year = await this.svc.getActiveYear();
-if (!year) {
-  throw new BadRequestException('Aucune année scolaire active');
-}
+    const year = await this.svc.getActiveYear();
+    if (!year) {
+      throw new BadRequestException('Aucune année scolaire active');
+    }
 
     const enrollment = this.enrollmentRepo.create({
       parent: savedParent,
@@ -114,57 +114,66 @@ if (!year) {
 
   // -------- PARENT : CHARGER DEMANDE
   async getCurrentEnrollment(parentId: number) {
-const year = await this.svc.getActiveYear();
-if (!year) {
-  throw new BadRequestException('Aucune année scolaire active');
-}
-
-    return this.enrollmentRepo.findOne({
+    const year = await this.svc.getActiveYear();
+    if (!year) {
+      throw new BadRequestException('Aucune année scolaire active');
+    }
+    const enrollment = await this.enrollmentRepo.findOne({
       where: {
         parent: { id: parentId },
         schoolYear: { id: year.id },
       },
       relations: ['children', 'children.existingStudent'],
     });
+
+    if (!enrollment) return null;
+    return {
+      id: enrollment.id,
+      status: enrollment.status,
+      childrencount: enrollment.children?.length ?? 0,
+      createdAt: enrollment.createdAt,
+      children: enrollment.children,
+      SchoolYearLabel: year.label
+    }
   }
 
-// -------- PARENT : CRÉER brouillon si inexistant
-async startEnrollmentForParent(parentId: number) {
-  const year = await this.svc.getActiveYear();
-  if (!year) throw new BadRequestException('Aucune année scolaire active');
+  // -------- PARENT : CRÉER brouillon si inexistant
+  async startEnrollmentForParent(parentId: number) {
+    const year = await this.svc.getActiveYear();
+    if (!year) throw new BadRequestException('Aucune année scolaire active');
 
-  // 1) s'il existe déjà un dossier pour cette année, on le renvoie
-  const existing = await this.enrollmentRepo.findOne({
-    where: {
-      parent: { id: parentId },
-      schoolYear: { id: year.id },
-    },
-    relations: ['children', 'children.existingStudent'],
-  });
+    // 1) s'il existe déjà un dossier pour cette année, on le renvoie
+    const existing = await this.enrollmentRepo.findOne({
+      where: {
+        parent: { id: parentId },
+        schoolYear: { id: year.id },
+      },
+      relations: ['children', 'children.existingStudent'],
+    });
 
-  if (existing) return existing;
+    if (existing) return existing;
 
-  // 2) sinon on crée un brouillon
-  const parent = await this.parentRepo.findOne({
-    where: { id: parentId },
-    relations: ['children'],
-  });
-  if (!parent) throw new NotFoundException('Parent not found');
+    // 2) sinon on crée un brouillon
+    const parent = await this.parentRepo.findOne({
+      where: { id: parentId },
+      relations: ['children'],
+    });
+    if (!parent) throw new NotFoundException('Parent not found');
 
-  const enr = this.enrollmentRepo.create({
-    parent,
-    schoolYear: year,
-    status: EnrollmentStatus.DRAFT,
-    children: (parent.children ?? []).map((s) =>
-      this.childRepo.create({
-        existingStudent: s,
-        desiredLevel: '',
-      }),
-    ),
-  });
+    const enr = this.enrollmentRepo.create({
+      parent,
+      schoolYear: year,
+      status: EnrollmentStatus.DRAFT,
+      children: (parent.children ?? []).map((s) =>
+        this.childRepo.create({
+          existingStudent: s,
+          desiredLevel: '',
+        }),
+      ),
+    });
 
-  return this.enrollmentRepo.save(enr);
-}
+    return this.enrollmentRepo.save(enr);
+  }
 
   // -------- PARENT : UPDATE
   async updateEnrollment(parentId: number, dto: UpdateEnrollmentDto) {
@@ -202,245 +211,245 @@ async startEnrollmentForParent(parentId: number) {
   }
 
   // utilitaire exemple pour générer un studentRef (tu peux réutiliser ta logique existante)
-private numToLetters(n: number): string {
-  // 1 -> A, 2 -> B, ... 26 -> Z, 27 -> AA, ...
-  let s = '';
-  while (n > 0) {
-    n--; // base 26
-    s = String.fromCharCode(65 + (n % 26)) + s;
-    n = Math.floor(n / 26);
-  }
-  return s;
-}
-
-private async generateStudentRef(parent: Parent): Promise<string> {
-  const base = parent.familyCode; // ex: F25-001
-
-  // On récupère le dernier student du parent (rapide)
-  const last = await this.studentRepo.findOne({
-    where: { parent: { id: parent.id } },
-    select: { id: true, studentRef: true },
-    order: { id: 'DESC' },
-  });
-
-  // Format attendu: F25-001-001A (num + lettres à la fin)
-  // On extrait le numéro si possible
-  let nextNum = 1;
-
-  if (last?.studentRef) {
-    const m = last.studentRef.match(/-(\d+)([A-Z]+)$/); // ex: "-001A" ou "-027AA"
-    if (m) {
-      nextNum = Number(m[1]) + 1;
-    } else {
-      // fallback si ancien format
-      const count = await this.studentRepo.count({ where: { parent: { id: parent.id } } });
-      nextNum = count + 1;
+  private numToLetters(n: number): string {
+    // 1 -> A, 2 -> B, ... 26 -> Z, 27 -> AA, ...
+    let s = '';
+    while (n > 0) {
+      n--; // base 26
+      s = String.fromCharCode(65 + (n % 26)) + s;
+      n = Math.floor(n / 26);
     }
+    return s;
   }
 
-  const letters = this.numToLetters(nextNum); // 1->A, 2->B, 27->AA...
-  const padded = String(nextNum).padStart(3, '0'); // 001, 002...
+  private async generateStudentRef(parent: Parent): Promise<string> {
+    const base = parent.familyCode; // ex: F25-001
 
-  return `${base}-${padded}${letters}`; // F25-001-001A
-}
+    // On récupère le dernier student du parent (rapide)
+    const last = await this.studentRepo.findOne({
+      where: { parent: { id: parent.id } },
+      select: { id: true, studentRef: true },
+      order: { id: 'DESC' },
+    });
 
+    // Format attendu: F25-001-001A (num + lettres à la fin)
+    // On extrait le numéro si possible
+    let nextNum = 1;
 
-async updateStatus(enrollmentId: number, newStatus: EnrollmentStatus) {
-  const enr = await this.enrollmentRepo.findOne({
-    where: { id: enrollmentId },
-    relations: [
-      'parent',
-      'children',
-      'children.existingStudent',
-      'children.targetClassGroup',
-    ],
-  });
+    if (last?.studentRef) {
+      const m = last.studentRef.match(/-(\d+)([A-Z]+)$/); // ex: "-001A" ou "-027AA"
+      if (m) {
+        nextNum = Number(m[1]) + 1;
+      } else {
+        // fallback si ancien format
+        const count = await this.studentRepo.count({ where: { parent: { id: parent.id } } });
+        nextNum = count + 1;
+      }
+    }
 
-  if (!enr) {
-    throw new NotFoundException('Enrollment not found');
+    const letters = this.numToLetters(nextNum); // 1->A, 2->B, 27->AA...
+    const padded = String(nextNum).padStart(3, '0'); // 001, 002...
+
+    return `${base}-${padded}${letters}`; // F25-001-001A
   }
 
-  const previousStatus = enr.status;
-  enr.status = newStatus;
 
-  // Si on ne passe pas en VALIDATED → on ne fait que sauver le statut
-  if (
-    newStatus !== EnrollmentStatus.VALIDATED ||
-    previousStatus === EnrollmentStatus.VALIDATED
-  ) {
+  async updateStatus(enrollmentId: number, newStatus: EnrollmentStatus) {
+    const enr = await this.enrollmentRepo.findOne({
+      where: { id: enrollmentId },
+      relations: [
+        'parent',
+        'children',
+        'children.existingStudent',
+        'children.targetClassGroup',
+      ],
+    });
+
+    if (!enr) {
+      throw new NotFoundException('Enrollment not found');
+    }
+
+    const previousStatus = enr.status;
+    enr.status = newStatus;
+
+    // Si on ne passe pas en VALIDATED → on ne fait que sauver le statut
+    if (
+      newStatus !== EnrollmentStatus.VALIDATED ||
+      previousStatus === EnrollmentStatus.VALIDATED
+    ) {
+      return this.enrollmentRepo.save(enr);
+    }
+
+    // 🔥 Ici : on passe de SUBMITTED / UNDER_REVIEW / PENDING_TEST → VALIDATED
+    // On crée / met à jour les Students + affectation classe
+    for (const child of enr.children) {
+      let student: any; // ✅ UN seul Student
+
+      if (child.existingStudent) {
+        // ----- CAS RÉINSCRIPTION -----
+        student = child.existingStudent;
+        if (child.desiredLevel) {
+          (student as any).level = child.desiredLevel; // adapte selon ton Student
+        }
+      } else {
+        // ----- CAS NOUVEL ENFANT -----
+        const ref = await this.generateStudentRef(enr.parent);
+
+        student = this.studentRepo.create({
+          firstName: child.tempFirstName,
+          lastName: child.tempLastName,
+          fullName: `${child.tempFirstName} ${child.tempLastName}`,
+          birthDate: child.birthDate,
+          level: child.desiredLevel,
+          parent: enr.parent,
+          studentRef: ref,
+        } as any); // "as any" si TS veut un cast
+
+        student = await this.studentRepo.save(student);
+
+        // on rattache le nouvel élève à l'enfant d'inscription
+        child.existingStudent = student;
+      }
+
+      // Affectation à la classe si une targetClassGroup est définie
+      if (child.targetClassGroup) {
+        (student as any).classGroup = child.targetClassGroup;
+        await this.studentRepo.save(student);
+      }
+
+      await this.childRepo.save(child);
+    }
+
     return this.enrollmentRepo.save(enr);
   }
 
-  // 🔥 Ici : on passe de SUBMITTED / UNDER_REVIEW / PENDING_TEST → VALIDATED
-  // On crée / met à jour les Students + affectation classe
-  for (const child of enr.children) {
-    let student: any; // ✅ UN seul Student
-
-    if (child.existingStudent) {
-      // ----- CAS RÉINSCRIPTION -----
-      student = child.existingStudent;
-      if (child.desiredLevel) {
-        (student as any).level = child.desiredLevel; // adapte selon ton Student
-      }
-    } else {
-      // ----- CAS NOUVEL ENFANT -----
-      const ref = await this.generateStudentRef(enr.parent);
-
-      student = this.studentRepo.create({
-        firstName: child.tempFirstName,
-        lastName: child.tempLastName,
-        fullName: `${child.tempFirstName} ${child.tempLastName}`,
-        birthDate: child.birthDate,
-        level: child.desiredLevel,
-        parent: enr.parent,
-        studentRef: ref,
-      } as any); // "as any" si TS veut un cast
-
-      student = await this.studentRepo.save(student);
-
-      // on rattache le nouvel élève à l'enfant d'inscription
-      child.existingStudent = student;
-    }
-
-    // Affectation à la classe si une targetClassGroup est définie
-    if (child.targetClassGroup) {
-      (student as any).classGroup = child.targetClassGroup;
-      await this.studentRepo.save(student);
-    }
-
-    await this.childRepo.save(child);
+  async getRequestById(id: number) {
+    return this.enrollmentRepo.findOne({
+      where: { id },
+      relations: [
+        'parent',
+        'schoolYear',
+        'children',
+        'children.existingStudent',
+        'children.targetClassGroup',
+      ],
+    });
   }
 
-  return this.enrollmentRepo.save(enr);
-}
 
-async getRequestById(id: number) {
-  return this.enrollmentRepo.findOne({
-    where: { id },
-    relations: [
-      'parent',
-      'schoolYear',
-      'children',
-      'children.existingStudent',
-      'children.targetClassGroup',
-    ],
-  });
-}
+  private async generateFamilyCode(): Promise<string> {
+    const yearSuffix = String(new Date().getFullYear()).slice(-2); // "25"
+    const prefix = `F${yearSuffix}-`;
 
-
-private async generateFamilyCode(): Promise<string> {
-  const yearSuffix = String(new Date().getFullYear()).slice(-2); // "25"
-  const prefix = `F${yearSuffix}-`;
-
-  const last = await this.parentRepo.findOne({
-    where: { familyCode: Like(`${prefix}%`) },
-    select: { familyCode: true },
-    order: { familyCode: 'DESC' }, // <-- CRUCIAL
-  });
-
-  const lastNum = last?.familyCode
-    ? Number(last.familyCode.replace(prefix, ''))
-    : 0;
-
-  const nextNum = lastNum + 1;
-  return `${prefix}${String(nextNum).padStart(3, '0')}`; // F25-001
-}
-
-
-
-async searchEnrollmentChildren(search: string) {
-  const s = (search || '');
-  if (!s) return [];
-
-  // tokens: "fat ndiaye" => ["fat","ndiaye"]
-  const tokens = s.toLowerCase().split(/\s+/).slice(0, 5); // limite anti-abus
-  const take = 50;
-
-  // 1) Enfants issus des demandes (nouvelle inscription / réinscription)
-  const qbChild = this.childRepo
-    .createQueryBuilder('c')
-    .leftJoinAndSelect('c.enrollmentRequest', 'req')
-    .leftJoinAndSelect('req.parent', 'parent')
-    .leftJoinAndSelect('c.existingStudent', 'existingStudent')
-    .leftJoinAndSelect('c.targetClassGroup', 'target')
-    .orderBy('c.id', 'DESC')
-    .take(take);
-
-  // AND sur tokens, OR sur champs
-  qbChild.andWhere(new Brackets((andQb) => {
-    tokens.forEach((t, idx) => {
-      const p = `t${idx}`;
-      andQb.andWhere(new Brackets((orQb) => {
-        orQb
-          .where(`LOWER(c.tempFirstName) ILIKE :${p}`, { [p]: `%${t}%` })
-          .orWhere(`LOWER(c.tempLastName) ILIKE :${p}`, { [p]: `%${t}%` })
-          .orWhere(`LOWER(parent.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
-          .orWhere(`LOWER(parent.familyCode) ILIKE :${p}`, { [p]: `%${t}%` })
-          // si réinscription -> existingStudent plein
-          .orWhere(`LOWER(existingStudent.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
-          .orWhere(`LOWER(existingStudent.studentRef) ILIKE :${p}`, { [p]: `%${t}%` });
-      }));
+    const last = await this.parentRepo.findOne({
+      where: { familyCode: Like(`${prefix}%`) },
+      select: { familyCode: true },
+      order: { familyCode: 'DESC' }, // <-- CRUCIAL
     });
-  }));
 
-  const enrollmentChildren = await qbChild.getMany();
+    const lastNum = last?.familyCode
+      ? Number(last.familyCode.replace(prefix, ''))
+      : 0;
 
-  // 2) Students existants
-  const qbStudent = this.studentRepo
-    .createQueryBuilder('st')
-    .leftJoinAndSelect('st.parent', 'parent')
-    .leftJoinAndSelect('st.classGroup', 'classGroup')
-    .orderBy('st.id', 'DESC')
-    .take(take);
+    const nextNum = lastNum + 1;
+    return `${prefix}${String(nextNum).padStart(3, '0')}`; // F25-001
+  }
 
-  qbStudent.andWhere(new Brackets((andQb) => {
-    tokens.forEach((t, idx) => {
-      const p = `t${idx}`;
-      andQb.andWhere(new Brackets((orQb) => {
-        orQb
-          .where(`LOWER(st.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
-          .orWhere(`LOWER(st.studentRef) ILIKE :${p}`, { [p]: `%${t}%` })
-          .orWhere(`LOWER(parent.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
-          .orWhere(`LOWER(parent.familyCode) ILIKE :${p}`, { [p]: `%${t}%` });
-      }));
+
+
+  async searchEnrollmentChildren(search: string) {
+    const s = (search || '');
+    if (!s) return [];
+
+    // tokens: "fat ndiaye" => ["fat","ndiaye"]
+    const tokens = s.toLowerCase().split(/\s+/).slice(0, 5); // limite anti-abus
+    const take = 50;
+
+    // 1) Enfants issus des demandes (nouvelle inscription / réinscription)
+    const qbChild = this.childRepo
+      .createQueryBuilder('c')
+      .leftJoinAndSelect('c.enrollmentRequest', 'req')
+      .leftJoinAndSelect('req.parent', 'parent')
+      .leftJoinAndSelect('c.existingStudent', 'existingStudent')
+      .leftJoinAndSelect('c.targetClassGroup', 'target')
+      .orderBy('c.id', 'DESC')
+      .take(take);
+
+    // AND sur tokens, OR sur champs
+    qbChild.andWhere(new Brackets((andQb) => {
+      tokens.forEach((t, idx) => {
+        const p = `t${idx}`;
+        andQb.andWhere(new Brackets((orQb) => {
+          orQb
+            .where(`LOWER(c.tempFirstName) ILIKE :${p}`, { [p]: `%${t}%` })
+            .orWhere(`LOWER(c.tempLastName) ILIKE :${p}`, { [p]: `%${t}%` })
+            .orWhere(`LOWER(parent.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
+            .orWhere(`LOWER(parent.familyCode) ILIKE :${p}`, { [p]: `%${t}%` })
+            // si réinscription -> existingStudent plein
+            .orWhere(`LOWER(existingStudent.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
+            .orWhere(`LOWER(existingStudent.studentRef) ILIKE :${p}`, { [p]: `%${t}%` });
+        }));
+      });
+    }));
+
+    const enrollmentChildren = await qbChild.getMany();
+
+    // 2) Students existants
+    const qbStudent = this.studentRepo
+      .createQueryBuilder('st')
+      .leftJoinAndSelect('st.parent', 'parent')
+      .leftJoinAndSelect('st.classGroup', 'classGroup')
+      .orderBy('st.id', 'DESC')
+      .take(take);
+
+    qbStudent.andWhere(new Brackets((andQb) => {
+      tokens.forEach((t, idx) => {
+        const p = `t${idx}`;
+        andQb.andWhere(new Brackets((orQb) => {
+          orQb
+            .where(`LOWER(st.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
+            .orWhere(`LOWER(st.studentRef) ILIKE :${p}`, { [p]: `%${t}%` })
+            .orWhere(`LOWER(parent.fullName) ILIKE :${p}`, { [p]: `%${t}%` })
+            .orWhere(`LOWER(parent.familyCode) ILIKE :${p}`, { [p]: `%${t}%` });
+        }));
+      });
+    }));
+
+    const students = await qbStudent.getMany();
+
+    // 3) Normalisation : même format pour le front
+    const mappedEnrollment = enrollmentChildren.map((c) => ({
+      source: 'ENROLLMENT_CHILD' as const,
+      id: c.id,
+      fullName: `${c.tempFirstName ?? ''} ${c.tempLastName ?? ''}`.trim() || c.existingStudent?.fullName,
+      level: c.desiredLevel ?? null,
+      studentRef: c.existingStudent?.studentRef ?? null,
+      parentName: c.enrollmentRequest?.parent?.fullName ?? null,
+      familyCode: c.enrollmentRequest?.parent?.familyCode ?? null,
+    }));
+
+    const mappedStudents = students.map((st) => ({
+      source: 'STUDENT' as const,
+      id: st.id,
+      fullName: st.fullName,
+      level: null,
+      studentRef: st.studentRef ?? null,
+      parentName: st.parent?.fullName ?? null,
+      familyCode: st.parent?.familyCode ?? null,
+    }));
+
+    // 4) Fusion + dédoublonnage simple (si un student ressort aussi via enrollment)
+    const seen = new Set<string>();
+    const merged = [...mappedEnrollment, ...mappedStudents].filter((x) => {
+      const key = `${x.source}:${x.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
-  }));
 
-  const students = await qbStudent.getMany();
+    return merged.slice(0, 50);
+  }
 
-  // 3) Normalisation : même format pour le front
-  const mappedEnrollment = enrollmentChildren.map((c) => ({
-    source: 'ENROLLMENT_CHILD' as const,
-    id: c.id,
-    fullName: `${c.tempFirstName ?? ''} ${c.tempLastName ?? ''}`.trim() || c.existingStudent?.fullName,
-    level: c.desiredLevel ?? null,
-    studentRef: c.existingStudent?.studentRef ?? null,
-    parentName: c.enrollmentRequest?.parent?.fullName ?? null,
-    familyCode: c.enrollmentRequest?.parent?.familyCode ?? null,
-  }));
 
-  const mappedStudents = students.map((st) => ({
-    source: 'STUDENT' as const,
-    id: st.id,
-    fullName: st.fullName,
-    level: null,
-    studentRef: st.studentRef ?? null,
-    parentName: st.parent?.fullName ?? null,
-    familyCode: st.parent?.familyCode ?? null,
-  }));
-
-  // 4) Fusion + dédoublonnage simple (si un student ressort aussi via enrollment)
-  const seen = new Set<string>();
-  const merged = [...mappedEnrollment, ...mappedStudents].filter((x) => {
-    const key = `${x.source}:${x.id}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  return merged.slice(0, 50);
-}
-
-  
 
 }

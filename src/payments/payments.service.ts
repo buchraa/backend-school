@@ -97,7 +97,7 @@ if (paid >= expected) {
 
   async findByFamilyCode(parentId: number): Promise<Payment[]> {
   return this.paymentsRepo.find({
-    where: { id: parentId  },
+    where: {  parent: { id: parentId }  },
     select: ['parent', 'familyBilling'],
     order: { paymentDate: 'DESC' },
   });

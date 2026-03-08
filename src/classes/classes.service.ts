@@ -59,7 +59,11 @@ export class ClassesService {
   async findOne(id: number): Promise<ClassGroup> {
     const group = await this.classesRepo.findOne({
       where: { id },
-      relations: ['teachers', 'students'],
+      relations: { teachers: true, students: true },
+      select: { id: true, code: true, label: true, level: true, maxStudents: true ,
+      teachers: { id: true, fullName: true },
+      students: { id: true, fullName: true, studentRef: true }}
+
     });
 
     if (!group) {

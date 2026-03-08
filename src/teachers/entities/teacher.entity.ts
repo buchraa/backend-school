@@ -23,12 +23,12 @@ export class Teacher {
   phone: string;
 
   // Matières enseignées
-  @ManyToMany(() => Subject, (subject) => subject.teachers, { eager: true })
+  @ManyToMany(() => Subject, (subject) => subject.teachers)
   @JoinTable()
   subjects: Subject[];
 
   // Classes / groupes pris en charge
-  @ManyToMany(() => ClassGroup, (group) => group.teachers, { eager: true })
+  @ManyToMany(() => ClassGroup, (group) => group.teachers)
   @JoinTable()
   classGroups: ClassGroup[];
 }
